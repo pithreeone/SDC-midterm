@@ -1,0 +1,22 @@
+<launch>
+    <param name="use_sim_time" value="true" />
+
+    <param name="map_path" type="string" value="$(find localization)/data/pcd_tiles_filtered/" />
+    <param name="save_path" type="string" value="$(find localization)/result/track1_result.csv" />
+
+    <node pkg="localization" type="visualization" name="visualization_node" output="screen"/>
+    <node pkg="localization" type="radar" name="radar_subscriber" output="screen"/>
+    
+    <node pkg="rviz" type="rviz" name="display_result" output="screen" args="-d $(find localization)/config/visualization.rviz" />
+    
+    <arg name="bags" default="
+        $(find localization)/data/sdc_track1.bag
+    "/>
+
+    <node pkg="rosbag" type="play" name="bag_player" required="true" output="screen"
+        args="
+        --clock
+        --pause
+        --bags $(arg bags)
+    "/>
+</launch>
