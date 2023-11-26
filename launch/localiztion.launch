@@ -6,8 +6,12 @@
     <param name="map_path" type="string" value="$(find localization)/data/pcd_tiles_filtered/" />
     <param name="save_path" type="string" value="$(find localization)/result/result1.csv" />
 
+
+    
     <node pkg="localization" type="map_pub" name="map_punlisher" output="screen"/>
-    <node pkg="localization" type="radar" name="radar_subscriber" output="screen"/>
+    <node pkg="localization" type="radar" name="radar_subscriber" output="screen">
+        <param name="intensity_thres" type="double" value="90"/>
+    </node>
     <node pkg="localization" type="localization" name="localizer" output="screen"/>
     
     <arg name="bags" default="
