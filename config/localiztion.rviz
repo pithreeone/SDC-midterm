@@ -68,7 +68,7 @@ Visualization Manager:
       Channel Name: intensity
       Class: rviz/PointCloud2
       Color: 255; 255; 255
-      Color Transformer: Intensity
+      Color Transformer: FlatColor
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
@@ -91,6 +91,10 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        base_link:
+          Value: true
+        map:
+          Value: true
       Marker Alpha: 1
       Marker Scale: 5
       Name: TF
@@ -98,7 +102,9 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          base_link:
+            {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -239,7 +245,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 97.34347534179688
+      Distance: 108.72976684570312
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -247,17 +253,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -18.446855545043945
-        Y: -11.873047828674316
-        Z: 0
+        X: -13.03687572479248
+        Y: 9.3245210647583
+        Z: 3.565401493688114e-05
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.3747961521148682
+      Pitch: 1.5697963237762451
       Target Frame: base_link
-      Yaw: 5.645391941070557
+      Yaw: 3.1503865718841553
     Saved: ~
 Window Geometry:
   Displays:

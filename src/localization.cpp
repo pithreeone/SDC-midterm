@@ -120,6 +120,16 @@ public:
         map_ready = true;
     }
 
+    void print4x4Matrix (const Eigen::Matrix4f & matrix)
+    {
+        printf ("Rotation matrix :\n");
+        printf ("    | %6.3f %6.3f %6.3f | \n", matrix (0, 0), matrix (0, 1), matrix (0, 2));
+        printf ("R = | %6.3f %6.3f %6.3f | \n", matrix (1, 0), matrix (1, 1), matrix (1, 2));
+        printf ("    | %6.3f %6.3f %6.3f | \n", matrix (2, 0), matrix (2, 1), matrix (2, 2));
+        printf ("Translation vector :\n");
+        printf ("t = < %6.3f, %6.3f, %6.3f >\n\n", matrix (0, 3), matrix (1, 3), matrix (2, 3));
+    }
+
     void radar_pc_callback(const sensor_msgs::PointCloud2::ConstPtr& msg)
     {
         ROS_WARN("Got Radar Pointcloud");
@@ -138,12 +148,58 @@ public:
         if(!initialized)
         {
             /*TODO : Initialize initial guess*/
+            pose_x = gps_x;
+            pose_y = gps_y;
+            pose_yaw = gps_yaw;
+            initialized = true;
         }
 
         /*TODO : Implenment any scan matching base on initial guess, ICP, NDT, etc. */
         /*TODO : Assign the result to pose_x, pose_y, pose_yaw */
         /*TODO : Use result as next time initial guess */
-        
+
+        pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
+        icp.setInputSource(radar_pc);
+        icp.setInputTarget(map_pc);
+
+        // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
+        icp.setMaxCorrespondenceDistance(5);
+        // Set the maximum number of iterations (criterion 1)
+        icp.setMaximumIterations(2000);
+        // Set the transformation epsilon (criterion 2)
+        icp.setTransformationEpsilon(1e-8);
+        // Set the euclidean distance difference epsilon (criterion 3)
+        icp.setEuclideanFitnessEpsilon(1e-6);
+
+        // set the initial guess
+        Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
+
+        // Set translation values in the matrix
+        initialGuess(0, 3) = pose_x;  // x translation
+        initialGuess(1, 3) = pose_y;  // y translation
+        initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
+        // Perform the alignment
+        icp.align(*output_pc, initialGuess);
+        // Obtain the transformation that aligned cloud_source to cloud_source_registered
+        Eigen::Matrix4f transformationMatrix = icp.getFinalTransformation();     
+        print4x4Matrix(transformationMatrix);
+        // Extract the translation vector from the last column
+        Eigen::Vector3f translationVector = transformationMatrix.block<3, 1>(0, 3);
+        pose_x = translationVector[0];
+        pose_y = translationVector[1];
+
+        // Extract the 3x3 rotation matrix from the upper-left corner
+        Eigen::Matrix3f rotationMatrix = transformationMatrix.block<3, 3>(0, 0);
+
+        // Extract RPY angles
+        Eigen::Vector3f rpyAngles = rotationMatrix.eulerAngles(0, 1, 2); // Order of rotations: XYZ
+        pose_yaw = rpyAngles[2];
+
+        //Return the state of convergence after the last align run. 
+        //If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
+        ROS_INFO("has converged: %d\n", icp.hasConverged());
+        ROS_INFO("score: %f", icp.getFitnessScore());
+
         tf_brocaster(pose_x, pose_y, pose_yaw);
         radar_pose_publisher(pose_x, pose_y, pose_yaw);
 

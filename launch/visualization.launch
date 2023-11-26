@@ -2,7 +2,7 @@
     <param name="use_sim_time" value="true" />
 
     <param name="map_path" type="string" value="$(find localization)/data/pcd_tiles_filtered/" />
-    <param name="save_path" type="string" value="$(find localization)/result/track1_result.csv" />
+    <param name="save_path" type="string" value="$(find localization)/result/result1.csv" />
 
     <node pkg="localization" type="visualization" name="visualization_node" output="screen"/>
     <node pkg="localization" type="radar" name="radar_subscriber" output="screen"/>

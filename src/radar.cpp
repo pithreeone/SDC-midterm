@@ -33,7 +33,6 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
     /*TODO : Transform Polar Image to Cartisien Pointcloud*/
     int row = img.rows;   // 2856
     int col = img.cols;   // 400
-    ROS_INFO("ros: %d, col: %d", row, col);
     // col: angle
     for(int i=0; i<col; i++){
         static double PI = 3.1415926;
@@ -42,8 +41,8 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
         for(int j=4; j<row; j++){
             double distance = (j - 4) * range_resolution;
             pcl::PointXYZI point;
-            point.x = distance * cos(angle);
-            point.y = distance * sin(angle);
+            point.x = distance * cos(-angle);
+            point.y = distance * sin(-angle);
             point.z = 0;
             // std::cout << static_cast<float>(img.at<uchar>(j,i)) << std::endl;
             point.intensity = static_cast<float>(img.at<uchar>(j,i));
@@ -69,7 +68,7 @@ void radarCallback(const sensor_msgs::ImageConstPtr& msg)
     sensor_msgs::PointCloud2 pc_msg;
     pcl::toROSMsg(*radar_pc_ptr, pc_msg);
     pc_msg.header.stamp = ros::Time::now();
-    pc_msg.header.frame_id = "base_link";
+    pc_msg.header.frame_id = "Navtech";
     radar_pub.publish(pc_msg);
 }
 
