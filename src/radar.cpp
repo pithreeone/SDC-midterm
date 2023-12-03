@@ -7,6 +7,8 @@
 #include <pcl/common/transforms.h>
 #include <pcl/common/io.h> 
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_broadcaster.h>
@@ -19,6 +21,7 @@ using namespace ros;
 
 const float range_resolution = 0.175;
 Publisher radar_pub;
+Publisher radar_original_pub;
 double intensity_thres;
 
 bool intensity_compare(pcl::PointXYZI a, pcl::PointXYZI b) 
@@ -29,6 +32,7 @@ bool intensity_compare(pcl::PointXYZI a, pcl::PointXYZI b)
 pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
 {
     pcl::PointCloud<pcl::PointXYZI>::Ptr new_pc(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZI>);
     
     /*TODO : Transform Polar Image to Cartisien Pointcloud*/
     int row = img.rows;   // 2856
@@ -53,8 +57,21 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
             new_pc->points.push_back(point);
         }
     }
+    // sensor_msgs::PointCloud2 pc_msg;
+    // pcl::toROSMsg(*new_pc, pc_msg);
+    // pc_msg.header.stamp = ros::Time::now();
+    // pc_msg.header.frame_id = "map";
+    // radar_original_pub.publish(pc_msg);
 
 
+    // pcl::StatisticalOutlierRemoval<pcl::PointXYZI> sor;
+    // sor.setInputCloud(new_pc);
+    // sor.setMeanK(50); // Adjust the number of neighbors to consider
+    // sor.setStddevMulThresh(1.0); // Adjust the standard deviation threshold
+    // sor.filter(*cloud_filtered);
+
+
+    // return cloud_filtered;
     return new_pc;
 }
 
@@ -68,7 +85,7 @@ void radarCallback(const sensor_msgs::ImageConstPtr& msg)
     sensor_msgs::PointCloud2 pc_msg;
     pcl::toROSMsg(*radar_pc_ptr, pc_msg);
     pc_msg.header.stamp = ros::Time::now();
-    pc_msg.header.frame_id = "Navtech";
+    pc_msg.header.frame_id = "base_link";
     radar_pub.publish(pc_msg);
 }
 
@@ -79,6 +96,7 @@ int main(int argc, char** argv)
     ros::NodeHandle nh_local("~");
     image_transport::ImageTransport it(nh);
     radar_pub = nh.advertise<sensor_msgs::PointCloud2>("/radar_pc", 1);
+    radar_original_pub = nh.advertise<sensor_msgs::PointCloud2>("/radar_original_pc", 1);
     image_transport::Subscriber sub = it.subscribe("/Navtech/Polar", 1, radarCallback);
     
     nh_local.getParam("intensity_thres", intensity_thres);

@@ -72,7 +72,7 @@ public:
 
         init_guess.setIdentity();
         file.open(save_path);
-        file << "seq,x,y,yaw\n";
+        file << "id,x,y,yaw\n";
 
         radar_pc_sub = _nh.subscribe("/radar_pc", 400, &Localizer::radar_pc_callback, this);
         map_sub = _nh.subscribe("/map_pc", 1, &Localizer::map_callback, this);
@@ -182,7 +182,7 @@ public:
         icp.align(*output_pc, initialGuess);
         // Obtain the transformation that aligned cloud_source to cloud_source_registered
         Eigen::Matrix4f transformationMatrix = icp.getFinalTransformation();     
-        print4x4Matrix(transformationMatrix);
+        // print4x4Matrix(transformationMatrix);
         // Extract the translation vector from the last column
         Eigen::Vector3f translationVector = transformationMatrix.block<3, 1>(0, 3);
         pose_x = translationVector[0];

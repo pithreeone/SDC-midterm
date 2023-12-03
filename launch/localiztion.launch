@@ -10,7 +10,8 @@
     
     <node pkg="localization" type="map_pub" name="map_punlisher" output="screen"/>
     <node pkg="localization" type="radar" name="radar_subscriber" output="screen">
-        <param name="intensity_thres" type="double" value="90"/>
+        <param name="intensity_thres" type="double" value="90"/>    
+        <!-- <param name="intensity_thres" type="double" value="85"/> -->
     </node>
     <node pkg="localization" type="localization" name="localizer" output="screen"/>
     
