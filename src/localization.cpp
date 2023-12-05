@@ -26,6 +26,7 @@ class Localizer
 {
 private:
     ros::NodeHandle _nh;
+    ros::NodeHandle _nh_local;
 
     ros::Subscriber radar_pc_sub;
     ros::Subscriber map_sub;
@@ -61,14 +62,22 @@ private:
     bool gps_ready = false;
     bool initialized = false;
 
+    double lpf_gain;
+    double lpf_angle_gain;
+
 public:
-    Localizer(ros::NodeHandle nh) : map_pc(new pcl::PointCloud<pcl::PointXYZI>)
+    Localizer(ros::NodeHandle nh, ros::NodeHandle nh_local) : map_pc(new pcl::PointCloud<pcl::PointXYZI>)
     {
         map_ready = false;
         gps_ready = false;
         
         _nh = nh;
+        _nh_local = nh_local;
         _nh.param<string>("/save_path", save_path, "/Default/path");
+        _nh_local.param<double>("low_pass_filter_gain", lpf_gain, 0.5);
+        _nh_local.param<double>("low_pass_filter_angle_gain", lpf_angle_gain, 0.5);
+        // ROS_INFO("low_pass_filter_angle_gain:%f", lpf_angle_gain);
+        
 
         init_guess.setIdentity();
         file.open(save_path);
@@ -174,6 +183,7 @@ public:
         // set the initial guess
         Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
 
+        double temp_pose_x, temp_pose_y, temp_pose_yaw;
         // Set translation values in the matrix
         initialGuess(0, 3) = pose_x;  // x translation
         initialGuess(1, 3) = pose_y;  // y translation
@@ -185,15 +195,28 @@ public:
         // print4x4Matrix(transformationMatrix);
         // Extract the translation vector from the last column
         Eigen::Vector3f translationVector = transformationMatrix.block<3, 1>(0, 3);
-        pose_x = translationVector[0];
-        pose_y = translationVector[1];
+        temp_pose_x = translationVector[0];
+        temp_pose_y = translationVector[1];
 
         // Extract the 3x3 rotation matrix from the upper-left corner
         Eigen::Matrix3f rotationMatrix = transformationMatrix.block<3, 3>(0, 0);
 
         // Extract RPY angles
         Eigen::Vector3f rpyAngles = rotationMatrix.eulerAngles(0, 1, 2); // Order of rotations: XYZ
-        pose_yaw = rpyAngles[2];
+        temp_pose_yaw = rpyAngles[2];
+        
+        // do the low-pass filter
+        if(seq != 0){
+            pose_x = pose_x + lpf_gain * (temp_pose_x - pose_x);
+            pose_y = pose_y + lpf_gain * (temp_pose_y - pose_y);
+            pose_yaw = pose_yaw + lpf_angle_gain * (temp_pose_yaw - pose_yaw);    
+        }else{
+            pose_x = temp_pose_x;
+            pose_y = temp_pose_y;
+            pose_yaw = temp_pose_yaw;
+        }
+
+        // ROS_INFO("lpg_gain:%f", lpf_gain);
 
         //Return the state of convergence after the last align run. 
         //If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
@@ -274,7 +297,8 @@ int main(int argc, char** argv)
 {
     ros::init (argc, argv, "localizer");
     ros::NodeHandle nh;
-    Localizer Localizer(nh);
+    ros::NodeHandle nh_local("~");
+    Localizer Localizer(nh, nh_local);
 
     ros::spin();
     return 0;

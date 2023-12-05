@@ -2,7 +2,7 @@
     <param name="use_sim_time" value="true" />
 
     <param name="map_path" type="string" value="$(find localization)/data/pcd_tiles_filtered/" />
-    <param name="save_path" type="string" value="$(find localization)/result/result1-2.csv" />
+    <param name="save_path" type="string" value="$(find localization)/result/result2.csv" />
 
     <node pkg="localization" type="visualization" name="visualization_node" output="screen"/>
     <node pkg="localization" type="radar" name="radar_subscriber" output="screen">
@@ -12,7 +12,7 @@
     <node pkg="rviz" type="rviz" name="display_result" output="screen" args="-d $(find localization)/config/visualization.rviz" />
     
     <arg name="bags" default="
-        $(find localization)/data/sdc_track1.bag
+        $(find localization)/data/sdc_track2.bag
     "/>
 
     <node pkg="rosbag" type="play" name="bag_player" required="true" output="screen"
