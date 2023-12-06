@@ -124,9 +124,17 @@ public:
              0, 0, 0, 1, 0,
              0, 0, 0, 0, 1;
         
-        R <<  3,  0,  0,  0,  0,
-              0,  3,  0,  0,  0,
-              0,  0,  3,  0,  0,
+        // rosbag1
+        // R <<  .6,  0,  0,  0,  0,
+        //       0,  .6,  0,  0,  0,
+        //       0,  0,  .58,  0,  0,
+        //       0,  0,  0, .5,  0, 
+        //       0,  0,  0,  0, .5;
+
+        // rosbag2
+        R <<  .6,  0,  0,  0,  0,
+              0,  .6,  0,  0,  0,
+              0,  0,  .01,  0,  0,
               0,  0,  0, .5,  0, 
               0,  0,  0,  0, .5;
         
@@ -222,19 +230,32 @@ public:
                 // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
                 icp.setMaxCorrespondenceDistance(5);
                 // Set the maximum number of iterations (criterion 1)
-                icp.setMaximumIterations(2000);
+                icp.setMaximumIterations(100);
                 // Set the transformation epsilon (criterion 2)
                 icp.setTransformationEpsilon(1e-8);
                 // Set the euclidean distance difference epsilon (criterion 3)
-                icp.setEuclideanFitnessEpsilon(1e-6);
+                icp.setEuclideanFitnessEpsilon(1e-8);
 
                 // set the initial guess
                 Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
 
+                if(seq == 0){
+                    state << pose_x, pose_y, pose_yaw, 0, 0;
+                }
+                
+                // // KF - predict
+                state = A * state;
+                cov_mat = A * cov_mat * A.transpose() + Q;
                 // Set translation values in the matrix
-                initialGuess(0, 3) = pose_x;  // x translation
-                initialGuess(1, 3) = pose_y;  // y translation
-                initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
+                initialGuess(0, 3) = state(0, 0);  // x translation
+                initialGuess(1, 3) = state(1, 0);  // y translation
+                initialGuess.block<2, 2>(0, 0) << cos(state(2, 0)), -sin(state(2, 0)), sin(state(2, 0)), cos(state(2, 0));
+
+
+                // // Set translation values in the matrix
+                // initialGuess(0, 3) = pose_x;  // x translation
+                // initialGuess(1, 3) = pose_y;  // y translation
+                // initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
                 // Perform the alignment
                 icp.align(*output_pc, initialGuess);
                 // Obtain the transformation that aligned cloud_source to cloud_source_registered
@@ -250,17 +271,26 @@ public:
                 // // Method2: NDT
                 // Create NDT object
                 pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt;
-                ndt.setTransformationEpsilon(0.01);
-                ndt.setStepSize(0.1);
-                ndt.setResolution(1.0);
+                ndt.setTransformationEpsilon(1e-4);
+                ndt.setMaximumIterations(10);
+                ndt.setStepSize(10);
+                ndt.setResolution(10.0);
 
                 // Set input clouds
                 ndt.setInputSource(radar_pc);
                 ndt.setInputTarget(map_pc);
 
+                // set the initial guess
+                Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
+
+                // Set translation values in the matrix
+                initialGuess(0, 3) = pose_x;  // x translation
+                initialGuess(1, 3) = pose_y;  // y translation
+                initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
+
                 // Perform registration
                 pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-                ndt.align(*output_cloud);
+                ndt.align(*output_cloud, initialGuess);
 
                 // Output transformation
                 transformationMatrix = ndt.getFinalTransformation();
@@ -301,14 +331,14 @@ public:
             case 1:{
                 Eigen::Matrix<double, 5, 1> measurement;
                 if(seq == 0){
-                    state << temp_pose_x, temp_pose_y, temp_pose_yaw, 0, 0;
+                    // state << temp_pose_x, temp_pose_y, temp_pose_yaw, 0, 0;
                     measurement << temp_pose_x, temp_pose_y, temp_pose_yaw, 0, 0;
                 }else{
                     measurement << temp_pose_x, temp_pose_y, temp_pose_yaw, (temp_pose_x - temp_pose_x_before), (temp_pose_y - temp_pose_y_before);
                 }
-                // KF - predict
-                state = A * state;
-                cov_mat = A * cov_mat * A.transpose() + Q;
+                // // KF - predict
+                // state = A * state;
+                // cov_mat = A * cov_mat * A.transpose() + Q;
 
                 // KF - update              
                 Eigen::Matrix<double, 5, 5> K;
@@ -332,7 +362,11 @@ public:
         temp_pose_y_before = temp_pose_y;
 
         // ROS_INFO("lpg_gain:%f", lpf_gain);
-
+        if(seq == 0){
+            pose_x = temp_pose_x;
+            pose_y = temp_pose_y;
+            pose_yaw = temp_pose_yaw;
+        }
         tf_brocaster(pose_x, pose_y, pose_yaw);
         radar_pose_publisher(pose_x, pose_y, pose_yaw);
 

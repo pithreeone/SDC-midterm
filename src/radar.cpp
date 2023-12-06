@@ -103,7 +103,7 @@ int main(int argc, char** argv)
     image_transport::ImageTransport it(nh);
     radar_pub = nh.advertise<sensor_msgs::PointCloud2>("/radar_pc", 1);
     radar_original_pub = nh.advertise<sensor_msgs::PointCloud2>("/radar_original_pc", 1);
-    image_transport::Subscriber sub = it.subscribe("/Navtech/Polar", 1, radarCallback);
+    image_transport::Subscriber sub = it.subscribe("/Navtech/Polar", 5, radarCallback);
     
     nh_local.getParam("intensity_thres", intensity_thres);
     nh_local.getParam("maximum_distance", maximum_distance);
