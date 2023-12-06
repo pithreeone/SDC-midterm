@@ -23,6 +23,7 @@ const float range_resolution = 0.175;
 Publisher radar_pub;
 Publisher radar_original_pub;
 double intensity_thres;
+double maximum_distance;
 
 bool intensity_compare(pcl::PointXYZI a, pcl::PointXYZI b) 
 {
@@ -43,6 +44,10 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
         double angle = (double) i/col*2*PI;
         // row: distance
         for(int j=4; j<row; j++){
+            if((j-4) * range_resolution >= maximum_distance){
+                break;
+            }
+
             double distance = (j - 4) * range_resolution;
             pcl::PointXYZI point;
             point.x = distance * cos(-angle);
@@ -54,6 +59,7 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr create_radar_pc(Mat img)
                 point.intensity = 0;
                 continue;
             }
+
             new_pc->points.push_back(point);
         }
     }
@@ -100,6 +106,7 @@ int main(int argc, char** argv)
     image_transport::Subscriber sub = it.subscribe("/Navtech/Polar", 1, radarCallback);
     
     nh_local.getParam("intensity_thres", intensity_thres);
+    nh_local.getParam("maximum_distance", maximum_distance);
 
     ros::spin();
     return 0;

@@ -12,6 +12,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/ndt.h>
 #include <pcl_ros/transforms.h>
 
 #include <tf/tf.h>
@@ -62,8 +63,19 @@ private:
     bool gps_ready = false;
     bool initialized = false;
 
+    // ros-parameters
+    int filter_type;
+    int scan_matching_type;
     double lpf_gain;
     double lpf_angle_gain;
+
+    // KF-varibales
+    Eigen::Matrix<double, 5, 1> state;
+    Eigen::Matrix<double, 5, 5> cov_mat;
+    Eigen::Matrix<double, 5, 5> A;
+    Eigen::Matrix<double, 5, 5> C;
+    Eigen::Matrix<double, 5, 5> Q;
+    Eigen::Matrix<double, 5, 5> R;
 
 public:
     Localizer(ros::NodeHandle nh, ros::NodeHandle nh_local) : map_pc(new pcl::PointCloud<pcl::PointXYZI>)
@@ -76,6 +88,8 @@ public:
         _nh.param<string>("/save_path", save_path, "/Default/path");
         _nh_local.param<double>("low_pass_filter_gain", lpf_gain, 0.5);
         _nh_local.param<double>("low_pass_filter_angle_gain", lpf_angle_gain, 0.5);
+        _nh_local.param<int>("filter_type", filter_type, 0);
+        _nh_local.param<int>("scan_matching_type", scan_matching_type, 0);
         // ROS_INFO("low_pass_filter_angle_gain:%f", lpf_angle_gain);
         
 
@@ -90,6 +104,37 @@ public:
         radar_pc_pub = _nh.advertise<sensor_msgs::PointCloud2>("/tranformed_radar_pc", 1);
         radar_pose_pub = _nh.advertise<geometry_msgs::PoseStamped>("/tranformed_radar_pose", 1);
         path_pub = _nh.advertise<nav_msgs::Path>("/localization_path", 1);
+
+        // Initialize-KF-variables
+        A << 1, 0, 0, 1, 0,
+             0, 1, 0, 0, 1,
+             0, 0, 1, 0, 0,
+             0, 0, 0, 1, 0,
+             0, 0, 0, 0, 1;
+        
+        C << 1, 0, 0, 0, 0,
+             0, 1, 0, 0, 0,
+             0, 0, 1, 0, 0,
+             0, 0, 0, 1, 0,
+             0, 0, 0, 0, 1;
+        
+        Q << 1, 0, 0, 0, 0,
+             0, 1, 0, 0, 0,
+             0, 0, 1, 0, 0,
+             0, 0, 0, 1, 0,
+             0, 0, 0, 0, 1;
+        
+        R <<  3,  0,  0,  0,  0,
+              0,  3,  0,  0,  0,
+              0,  0,  3,  0,  0,
+              0,  0,  0, .5,  0, 
+              0,  0,  0,  0, .5;
+        
+        cov_mat << .1,  0,  0,  0,  0,
+                    0, .1,  0,  0,  0,
+                    0,  0, .1,  0,  0,
+                    0,  0,  0, .1,  0,
+                    0,  0,  0,  0, .1;
     }
 
     ~Localizer()
@@ -166,34 +211,66 @@ public:
         /*TODO : Implenment any scan matching base on initial guess, ICP, NDT, etc. */
         /*TODO : Assign the result to pose_x, pose_y, pose_yaw */
         /*TODO : Use result as next time initial guess */
+        Eigen::Matrix4f transformationMatrix;
+        switch(scan_matching_type){
+            case 0: {
+                // // Method1: pcl
+                pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
+                icp.setInputSource(radar_pc);
+                icp.setInputTarget(map_pc);
 
-        pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
-        icp.setInputSource(radar_pc);
-        icp.setInputTarget(map_pc);
+                // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
+                icp.setMaxCorrespondenceDistance(5);
+                // Set the maximum number of iterations (criterion 1)
+                icp.setMaximumIterations(2000);
+                // Set the transformation epsilon (criterion 2)
+                icp.setTransformationEpsilon(1e-8);
+                // Set the euclidean distance difference epsilon (criterion 3)
+                icp.setEuclideanFitnessEpsilon(1e-6);
 
-        // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-        icp.setMaxCorrespondenceDistance(5);
-        // Set the maximum number of iterations (criterion 1)
-        icp.setMaximumIterations(2000);
-        // Set the transformation epsilon (criterion 2)
-        icp.setTransformationEpsilon(1e-8);
-        // Set the euclidean distance difference epsilon (criterion 3)
-        icp.setEuclideanFitnessEpsilon(1e-6);
+                // set the initial guess
+                Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
 
-        // set the initial guess
-        Eigen::Matrix4f initialGuess = Eigen::Matrix4f::Identity();
+                // Set translation values in the matrix
+                initialGuess(0, 3) = pose_x;  // x translation
+                initialGuess(1, 3) = pose_y;  // y translation
+                initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
+                // Perform the alignment
+                icp.align(*output_pc, initialGuess);
+                // Obtain the transformation that aligned cloud_source to cloud_source_registered
+                transformationMatrix = icp.getFinalTransformation();   
 
-        double temp_pose_x, temp_pose_y, temp_pose_yaw;
-        // Set translation values in the matrix
-        initialGuess(0, 3) = pose_x;  // x translation
-        initialGuess(1, 3) = pose_y;  // y translation
-        initialGuess.block<2, 2>(0, 0) << cos(pose_yaw), -sin(pose_yaw), sin(pose_yaw), cos(pose_yaw);
-        // Perform the alignment
-        icp.align(*output_pc, initialGuess);
-        // Obtain the transformation that aligned cloud_source to cloud_source_registered
-        Eigen::Matrix4f transformationMatrix = icp.getFinalTransformation();     
+                //Return the state of convergence after the last align run. 
+                //If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
+                ROS_INFO("has converged: %d\n", icp.hasConverged());
+                ROS_INFO("score: %f", icp.getFitnessScore());
+                break;
+            }
+            case 1: {
+                // // Method2: NDT
+                // Create NDT object
+                pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt;
+                ndt.setTransformationEpsilon(0.01);
+                ndt.setStepSize(0.1);
+                ndt.setResolution(1.0);
+
+                // Set input clouds
+                ndt.setInputSource(radar_pc);
+                ndt.setInputTarget(map_pc);
+
+                // Perform registration
+                pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+                ndt.align(*output_cloud);
+
+                // Output transformation
+                transformationMatrix = ndt.getFinalTransformation();
+                break;
+            }
+        }
+
         // print4x4Matrix(transformationMatrix);
         // Extract the translation vector from the last column
+        double temp_pose_x, temp_pose_y, temp_pose_yaw;
         Eigen::Vector3f translationVector = transformationMatrix.block<3, 1>(0, 3);
         temp_pose_x = translationVector[0];
         temp_pose_y = translationVector[1];
@@ -205,23 +282,56 @@ public:
         Eigen::Vector3f rpyAngles = rotationMatrix.eulerAngles(0, 1, 2); // Order of rotations: XYZ
         temp_pose_yaw = rpyAngles[2];
         
-        // do the low-pass filter
-        if(seq != 0){
-            pose_x = pose_x + lpf_gain * (temp_pose_x - pose_x);
-            pose_y = pose_y + lpf_gain * (temp_pose_y - pose_y);
-            pose_yaw = pose_yaw + lpf_angle_gain * (temp_pose_yaw - pose_yaw);    
-        }else{
-            pose_x = temp_pose_x;
-            pose_y = temp_pose_y;
-            pose_yaw = temp_pose_yaw;
+        static double temp_pose_x_before, temp_pose_y_before;
+        switch(filter_type){
+            case 0: {
+                // do the low-pass filter
+                if(seq != 0){
+                    pose_x = pose_x + lpf_gain * (temp_pose_x - pose_x);
+                    pose_y = pose_y + lpf_gain * (temp_pose_y - pose_y);
+                    pose_yaw = pose_yaw + lpf_angle_gain * (temp_pose_yaw - pose_yaw);    
+                }else{
+                    pose_x = temp_pose_x;
+                    pose_y = temp_pose_y;
+                    pose_yaw = temp_pose_yaw;
+                }
+
+                break;
+            }
+            case 1:{
+                Eigen::Matrix<double, 5, 1> measurement;
+                if(seq == 0){
+                    state << temp_pose_x, temp_pose_y, temp_pose_yaw, 0, 0;
+                    measurement << temp_pose_x, temp_pose_y, temp_pose_yaw, 0, 0;
+                }else{
+                    measurement << temp_pose_x, temp_pose_y, temp_pose_yaw, (temp_pose_x - temp_pose_x_before), (temp_pose_y - temp_pose_y_before);
+                }
+                // KF - predict
+                state = A * state;
+                cov_mat = A * cov_mat * A.transpose() + Q;
+
+                // KF - update              
+                Eigen::Matrix<double, 5, 5> K;
+                K = cov_mat * C.transpose() * (C * cov_mat * C.transpose() + R).inverse();
+                state = state + K * (measurement - C * state);
+                Eigen::Matrix<double, 5, 5> identityMatrix;
+                identityMatrix << 1, 0, 0, 0, 0,
+                                  0, 1, 0, 0, 0,
+                                  0, 0, 1, 0, 0,
+                                  0, 0, 0, 1, 0,
+                                  0, 0, 0, 0, 1;
+                cov_mat = (identityMatrix - K * C) * cov_mat;
+                pose_x = state(0, 0);
+                pose_y = state(1, 0);
+                pose_yaw = state(2, 0);
+                ROS_INFO("Kalman-Filter-State: x: %f, y: %f, yaw: %f, vx: %f, vy: %f", state(0, 0), state(1, 0), state(2, 0), state(3, 0), state(4, 0));
+                break;
+            }
         }
+        temp_pose_x_before = temp_pose_x;
+        temp_pose_y_before = temp_pose_y;
 
         // ROS_INFO("lpg_gain:%f", lpf_gain);
-
-        //Return the state of convergence after the last align run. 
-        //If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
-        ROS_INFO("has converged: %d\n", icp.hasConverged());
-        ROS_INFO("score: %f", icp.getFitnessScore());
 
         tf_brocaster(pose_x, pose_y, pose_yaw);
         radar_pose_publisher(pose_x, pose_y, pose_yaw);
